@@ -39,7 +39,8 @@ const App = () => {
     setResult(null);
 
     try {
-      const response = await fetch('http://localhost:5001/api/analyze-reel', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      const response = await fetch(`${apiUrl}/api/analyze-reel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
