@@ -8,6 +8,10 @@ import tempfile
 from moviepy.editor import VideoFileClip
 import yt_dlp
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +21,9 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # OpenAI configuration
-openai.api_key = os.getenv("OPENAI_API_KEY", "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")
+openai.api_key = os.getenv("OPENAI_API_KEY")
+if not openai.api_key:
+    raise ValueError("OPENAI_API_KEY environment variable is required")
 
 def download_instagram_reel(reel_url: str, out_path: str = None):
     """Download Instagram reel and return the path to the video file"""
