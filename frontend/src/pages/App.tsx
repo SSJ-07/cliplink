@@ -39,28 +39,37 @@ const App = () => {
     setResult(null);
 
     try {
-      // Simulate API call for demo
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const response = await fetch('http://localhost:5001/api/analyze-reel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: url,
+          note: note
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
       
-      // Mock response
-      const mockResponse: ApiResponse = {
-        primarySku: "CARGO-PANTS-PINK-M",
-        primaryLink: "https://example.com/pink-cargo-pants",
-        altLinks: [
-          "https://example.com/similar-pink-pants",
-          "https://example.com/cargo-pants-alternative"
-        ]
-      };
+      if (data.error) {
+        throw new Error(data.error);
+      }
       
-      setResult(mockResponse);
+      setResult(data);
       toast({
         title: "Found it! 🎉",
         description: "We found some fire products for you!",
       });
     } catch (error) {
+      console.error('Error:', error);
       toast({
         title: "Oops! Something went wrong 😅",
-        description: "Try again in a sec - our servers might be taking a little nap",
+        description: error instanceof Error ? error.message : "Try again in a sec - our servers might be taking a little nap",
         variant: "destructive",
       });
     } finally {
