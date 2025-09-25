@@ -3,13 +3,13 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyD0LIf31ekvYTPU7zNz4NnUshcrcI9q0KM",
-  authDomain: "cliplink-78521.firebaseapp.com",
-  projectId: "cliplink-78521",
-  storageBucket: "cliplink-78521.appspot.com",
-  messagingSenderId: "882907930174",
-  appId: "1:882907930174:web:2fea6639433d5b01103b6f",
-  measurementId: "G-XYRWRBJYP6"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);
