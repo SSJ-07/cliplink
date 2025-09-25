@@ -39,7 +39,7 @@ const App = () => {
     setResult(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
       const response = await fetch(`${apiUrl}/api/analyze-reel`, {
         method: 'POST',
         headers: {
