@@ -251,10 +251,29 @@ def analyze_reel():
         logger.info(f"Processing reel: {reel_url}")
         logger.info(f"User description: {note}")
         
-        # Use AI to find products based on user description
-        result = find_products_by_description(note)
-        
-        return jsonify(result)
+        # Download and process the actual Instagram reel
+        try:
+            video_path = download_instagram_reel(reel_url)
+            if video_path:
+                # Extract frame from video
+                b64_image = extract_frame_base64(video_path)
+                # Use AI vision to analyze the actual video content
+                result = query_gpt4o(b64_image, note)
+                
+                # Clean up video file
+                if os.path.exists(video_path):
+                    os.unlink(video_path)
+                
+                return jsonify(result)
+            else:
+                # Fallback to description-based search if video download fails
+                result = find_products_by_description(note)
+                return jsonify(result)
+        except Exception as video_error:
+            logger.error(f"Video processing failed: {video_error}")
+            # Fallback to description-based search
+            result = find_products_by_description(note)
+            return jsonify(result)
         
     except Exception as e:
         logger.error(f"Error in analyze_reel: {e}")

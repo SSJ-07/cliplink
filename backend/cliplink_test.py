@@ -23,7 +23,7 @@ import requests
 import yt_dlp
 
 # 🔐 OpenAI key
-openai.api_key = "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"  # replace with your OpenAI API key
+openai.api_key = os.getenv("OPENAI_API_KEY")  # Load from environment variable
 
 def download_instagram_reel(reel_url: str, out_path: str = "reel.mp4"):
     ydl_opts = {
