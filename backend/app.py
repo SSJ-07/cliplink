@@ -18,7 +18,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+# Enhanced CORS configuration for Safari compatibility
+CORS(app, 
+     origins=["*"],  # Allow all origins
+     methods=["GET", "POST", "OPTIONS"],  # Explicitly allow methods
+     allow_headers=["Content-Type", "Authorization"],  # Allow headers
+     supports_credentials=True)  # Support credentials
 
 # OpenAI configuration
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -153,7 +158,16 @@ def create_mock_response_from_description(description: str):
     description_lower = description.lower()
     
     # Check for specific items and colors
-    if "pant" in description_lower and "black" in description_lower:
+    if "leopard" in description_lower and "top" in description_lower:
+        return {
+            "primarySku": "LEOPARD-PRINT-TOP",
+            "primaryLink": "https://www.amazon.com/s?k=leopard+print+top+women",
+            "altLinks": [
+                "https://www.zara.com/us/en/woman/tops-c358002.html",
+                "https://www.hm.com/us/en/women/tops/"
+            ]
+        }
+    elif "pant" in description_lower and "black" in description_lower:
         return {
             "primarySku": "BLACK-PANTS-MENS",
             "primaryLink": "https://www.amazon.com/s?k=black+pants+men",
@@ -209,14 +223,19 @@ def create_mock_response_from_description(description: str):
             ]
         }
 
-@app.route('/api/health', methods=['GET'])
+@app.route('/api/health', methods=['GET', 'OPTIONS'])
 def health_check():
     """Health check endpoint"""
+    if request.method == 'OPTIONS':
+        return '', 200
     return jsonify({"status": "healthy", "message": "Backend is running"})
 
-@app.route('/api/analyze-reel', methods=['POST'])
+@app.route('/api/analyze-reel', methods=['POST', 'OPTIONS'])
 def analyze_reel():
     """Analyze Instagram reel and find products"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     try:
         data = request.get_json()
         
