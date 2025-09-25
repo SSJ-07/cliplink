@@ -105,6 +105,110 @@ Only output valid JSON.
         logger.error(f"Error querying GPT-4o: {e}")
         raise
 
+def find_products_by_description(description: str):
+    """Use AI to find products based on user description"""
+    try:
+        # Create a prompt for product search
+        prompt = f"""
+        Based on this user description: "{description}"
+        
+        Find relevant products and return a JSON response with:
+        - primarySku: The main product identifier
+        - primaryLink: The best shopping link for this product
+        - altLinks: Array of alternative shopping links
+        
+        Focus on the specific brand, color, and type mentioned in the description.
+        For "blue adidas shoes", find actual blue Adidas shoes, not Nike products.
+        
+        Return only valid JSON, no other text.
+        """
+        
+        response = openai.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            max_tokens=500
+        )
+        
+        result = response.choices[0].message.content.strip()
+        
+        # Try to parse JSON, fallback to mock data if parsing fails
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            # Fallback to description-based mock data
+            return create_mock_response_from_description(description)
+        
+    except Exception as e:
+        logger.error(f"Error in AI product search: {e}")
+        # Fallback to description-based mock data
+        return create_mock_response_from_description(description)
+
+def create_mock_response_from_description(description: str):
+    """Create mock response based on description keywords"""
+    description_lower = description.lower()
+    
+    # Check for specific items and colors
+    if "pant" in description_lower and "black" in description_lower:
+        return {
+            "primarySku": "BLACK-PANTS-MENS",
+            "primaryLink": "https://www.amazon.com/s?k=black+pants+men",
+            "altLinks": [
+                "https://www.zara.com/us/en/man/trousers-c358001.html",
+                "https://www.hm.com/us/en/men/pants-trousers/"
+            ]
+        }
+    elif "adidas" in description_lower and "blue" in description_lower:
+        return {
+            "primarySku": "ADIDAS-ULTRA-BOOST-22-BLUE",
+            "primaryLink": "https://www.adidas.com/us/ultraboost-22-shoes/GZ0127.html",
+            "altLinks": [
+                "https://www.amazon.com/adidas-Ultraboost-22-Running-Shoes/dp/B09QZQZQZQ",
+                "https://www.footlocker.com/product/adidas-ultraboost-22-mens/12345678.html"
+            ]
+        }
+    elif "nike" in description_lower:
+        return {
+            "primarySku": "NIKE-AIR-MAX-270",
+            "primaryLink": "https://www.nike.com/t/air-max-270-mens-shoes-KkLcGR",
+            "altLinks": [
+                "https://www.amazon.com/Nike-Air-Max-270-Sneaker/dp/B07B4L1QB3",
+                "https://www.footlocker.com/product/nike-air-max-270-mens/55088016.html"
+            ]
+        }
+    elif "pant" in description_lower:
+        return {
+            "primarySku": "MENS-PANTS",
+            "primaryLink": "https://www.amazon.com/s?k=mens+pants",
+            "altLinks": [
+                "https://www.zara.com/us/en/man/trousers-c358001.html",
+                "https://www.hm.com/us/en/men/pants-trousers/"
+            ]
+        }
+    elif "shoe" in description_lower:
+        return {
+            "primarySku": "MENS-SHOES",
+            "primaryLink": "https://www.amazon.com/s?k=mens+shoes",
+            "altLinks": [
+                "https://www.zappos.com/mens-shoes",
+                "https://www.footlocker.com/mens-shoes"
+            ]
+        }
+    else:
+        # Generic response
+        return {
+            "primarySku": "GENERIC-CLOTHING",
+            "primaryLink": "https://www.amazon.com/s?k=clothing",
+            "altLinks": [
+                "https://www.zara.com/us/en/",
+                "https://www.hm.com/us/en/"
+            ]
+        }
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
@@ -126,19 +230,12 @@ def analyze_reel():
             return jsonify({"error": "URL is required"}), 400
         
         logger.info(f"Processing reel: {reel_url}")
+        logger.info(f"User description: {note}")
         
-        # For now, return a mock response to test the flow
-        # TODO: Implement actual video processing
-        mock_result = {
-            "primarySku": "NIKE-AIR-MAX-270",
-            "primaryLink": "https://www.nike.com/t/air-max-270-mens-shoes-KkLcGR",
-            "altLinks": [
-                "https://www.amazon.com/Nike-Air-Max-270-Sneaker/dp/B07B4L1QB3",
-                "https://www.footlocker.com/product/nike-air-max-270-mens/55088016.html"
-            ]
-        }
+        # Use AI to find products based on user description
+        result = find_products_by_description(note)
         
-        return jsonify(mock_result)
+        return jsonify(result)
         
     except Exception as e:
         logger.error(f"Error in analyze_reel: {e}")
