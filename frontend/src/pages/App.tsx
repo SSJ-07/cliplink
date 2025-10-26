@@ -6,13 +6,25 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, LogOut, Send, ExternalLink, Sparkles, Instagram, Music } from 'lucide-react';
+import { Loader2, LogOut, Send, Sparkles, Instagram, Music } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ProductResults } from '@/components/ProductResults';
+import { Product } from '@/components/ProductCard';
+
+interface DetectedLabel {
+  label: string;
+  confidence: number;
+}
 
 interface ApiResponse {
-  primarySku: string;
-  primaryLink: string;
-  altLinks: string[];
+  products: Product[];
+  count: number;
+  detected_labels?: DetectedLabel[];
+  detected_brand?: string;
+  // Legacy support
+  primarySku?: string;
+  primaryLink?: string;
+  altLinks?: string[];
 }
 
 const App = () => {
@@ -47,12 +59,14 @@ const App = () => {
         },
         body: JSON.stringify({
           url: url,
-          note: note
+          note: note,
+          num_frames: 3  // Extract 3 frames for better analysis
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
@@ -62,10 +76,20 @@ const App = () => {
       }
       
       setResult(data);
+      
+      const productCount = data.products?.length || 0;
       toast({
         title: "Found it! 🎉",
-        description: "We found some fire products for you!",
+        description: `We found ${productCount} amazing product${productCount !== 1 ? 's' : ''} for you!`,
       });
+
+      // Scroll to results
+      setTimeout(() => {
+        document.getElementById('results')?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
     } catch (error) {
       console.error('Error:', error);
       toast({
@@ -202,52 +226,14 @@ const App = () => {
         </Card>
 
         {/* Results */}
-        {result && (
-          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 text-green-600">
-                <Sparkles className="w-5 h-5" />
-                <span>Found It! 🎉</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Primary Product */}
-              <div className="p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl">
-                <h3 className="font-bold text-lg text-gray-900 mb-2">Primary Match</h3>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-800">{result.primarySku}</p>
-                    <p className="text-sm text-gray-600">This looks like the closest match!</p>
-                  </div>
-                  <Button asChild className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
-                    <a href={result.primaryLink} target="_blank" rel="noopener noreferrer">
-                      Shop Now <ExternalLink className="w-4 h-4 ml-2" />
-                    </a>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Alternative Products */}
-              <div>
-                <h3 className="font-bold text-lg text-gray-900 mb-4">Similar Vibes</h3>
-                <div className="grid gap-4">
-                  {result.altLinks.map((link, index) => (
-                    <div key={index} className="p-4 bg-gray-50 rounded-xl flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-800">Alternative #{index + 1}</p>
-                        <p className="text-sm text-gray-600">Another great option to consider</p>
-                      </div>
-                      <Button variant="outline" asChild>
-                        <a href={link} target="_blank" rel="noopener noreferrer">
-                          Check It Out <ExternalLink className="w-4 h-4 ml-2" />
-                        </a>
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {result && result.products && result.products.length > 0 && (
+          <div id="results" className="scroll-mt-8">
+            <ProductResults 
+              products={result.products}
+              detectedLabels={result.detected_labels}
+              detectedBrand={result.detected_brand}
+            />
+          </div>
         )}
       </main>
     </div>

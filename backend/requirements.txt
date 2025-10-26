@@ -6,4 +6,12 @@ moviepy==1.0.3
 Pillow==10.1.0
 requests==2.31.0
 python-dotenv==1.0.0
+google-cloud-vision==3.7.0
+numpy==1.26.3
+scikit-learn==1.4.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+sentence-transformers==2.3.1
+torch==2.1.2
+torchvision==0.16.2
 
