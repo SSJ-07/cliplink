@@ -6,8 +6,8 @@ import {
   onAuthStateChanged,
   User as FirebaseUser
 } from 'firebase/auth';
-import { auth, googleProvider } from '../lib/firebase';
-import { AuthUser, AuthContextType } from '../types';
+import { auth, googleProvider } from '@/lib/firebase';
+import { AuthUser, AuthContextType } from '@/types';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 

@@ -1,4 +1,4 @@
-import { AnalyzeReelResponse, HealthResponse, SearchProductsResponse } from '../types';
+import { AnalyzeReelResponse, HealthResponse, SearchProductsResponse } from '@/types';
 
 // Get API base URL - use proxy in dev, or env var in production
 const getApiUrl = (): string => {

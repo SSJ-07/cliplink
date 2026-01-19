@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import Navbar from '../components/Navbar';
+import { useAuth } from '@/contexts/AuthContext';
+import Navbar from '@/components/Navbar';
 
 const Home: React.FC = () => {
   const { user, login, isLoading } = useAuth();

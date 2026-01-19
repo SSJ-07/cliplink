@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import Navbar from '../components/Navbar';
-import { Product } from '../types';
-import { transformProduct, formatPrice, formatSimilarity } from '../utils/transform';
+import Navbar from '@/components/Navbar';
+import { Product } from '@/types';
+import { transformProduct, formatPrice, formatSimilarity } from '@/utils/transform';
 
 const AppPage: React.FC = () => {
   const [url, setUrl] = useState('');
