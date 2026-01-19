@@ -25,6 +25,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // If Firebase auth isn't configured (local/dev without Firebase), just skip auth.
+    if (!auth) {
+      // eslint-disable-next-line no-console
+      console.warn('[auth] Firebase auth not initialized. Running in unauthenticated mode.');
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);
@@ -35,6 +43,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     try {
+      if (!auth || !googleProvider) {
+        // eslint-disable-next-line no-console
+        console.warn('[auth] Sign-in requested but Firebase is not configured.');
+        return;
+      }
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
       console.error('Error signing in with Google:', error);
@@ -43,6 +56,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
+      if (!auth) {
+        // eslint-disable-next-line no-console
+        console.warn('[auth] Logout requested but Firebase is not configured.');
+        return;
+      }
       await signOut(auth);
     } catch (error) {
       console.error('Error signing out:', error);

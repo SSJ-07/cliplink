@@ -8,12 +8,12 @@ from flask_cors import CORS
 import logging
 import os
 from dotenv import load_dotenv
+import json
 
 # Import our services
 from services.vision_service import get_vision_service
 from services.video_service import get_video_service
 from services.web_search_service import get_web_search_service
-from services.clip_service import get_clip_service
 
 # Load environment variables
 load_dotenv()
@@ -76,6 +76,26 @@ def analyze_reel():
     
     try:
         data = request.get_json()
+
+        # #region agent log
+        try:
+            log_payload = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "H_frontend_payload",
+                "location": "app.py:analyze_reel:request",
+                "message": "analyze_reel payload received",
+                "data": {
+                    "has_data": data is not None,
+                    "keys": list(data.keys()) if isinstance(data, dict) else None
+                },
+                "timestamp": __import__("time").time()
+            }
+            with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                _f.write(json.dumps(log_payload) + "\n")
+        except Exception:
+            pass
+        # #endregion
         
         if not data:
             return jsonify({"error": "No JSON data provided"}), 400
@@ -97,18 +117,93 @@ def analyze_reel():
         
         # Step 1: Download video and extract frames
         logger.info("Step 1: Extracting frames from video...")
+
+        # #region agent log
+        try:
+            log_payload = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "H_video_start",
+                "location": "app.py:analyze_reel:before_process_reel",
+                "message": "Calling process_reel",
+                "data": {
+                    "reel_url_prefix": str(reel_url)[:64],
+                    "num_frames": num_frames
+                },
+                "timestamp": __import__("time").time()
+            }
+            with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                _f.write(json.dumps(log_payload) + "\n")
+        except Exception:
+            pass
+        # #endregion
+
         frames = video_service.process_reel(reel_url, num_frames=num_frames)
         
         if not frames:
             logger.warning("Could not extract frames from video")
+
+            # #region agent log
+            try:
+                log_payload = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "H_no_frames",
+                    "location": "app.py:analyze_reel:no_frames",
+                    "message": "process_reel returned no frames",
+                    "data": {
+                        "reel_url_prefix": str(reel_url)[:64],
+                        "num_frames_requested": num_frames
+                    },
+                    "timestamp": __import__("time").time()
+                }
+                with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                    _f.write(json.dumps(log_payload) + "\n")
+            except Exception:
+                pass
+            # #endregion
+
             return jsonify({
                 "error": "no_frame_extracted",
-                "message": "Unable to extract frames from the Instagram reel. Please try uploading a screenshot of the product instead.",
+                "message": "Unable to extract frames from the Instagram reel.",
+                "suggestion": "This could be due to Instagram restrictions, an unsupported video format, or the video being too short. Try using a different reel URL or upload a screenshot of the product instead.",
+                "debug_info": {
+                    "url": reel_url,
+                    "platform": "Instagram" if "instagram.com" in reel_url else "TikTok" if "tiktok.com" in reel_url else "Unknown",
+                    "frames_requested": num_frames,
+                    "frames_extracted": 0,
+                    "possible_causes": [
+                        "Instagram/TikTok requires authentication",
+                        "Video is private or deleted",
+                        "Network restrictions or rate limiting",
+                        "Video format not supported"
+                    ],
+                    "tip": "For Instagram reels, make sure the reel is publicly accessible (can be viewed in an incognito browser window)." if "instagram.com" in reel_url else ""
+                },
                 "used_clip": False,
                 "frames_extracted": 0
             }), 400
         
         logger.info(f"Extracted {len(frames)} frames")
+
+        # #region agent log
+        try:
+            log_payload = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "H_frames_ok",
+                "location": "app.py:analyze_reel:frames_ok",
+                "message": "process_reel returned frames",
+                "data": {
+                    "frames_count": len(frames)
+                },
+                "timestamp": __import__("time").time()
+            }
+            with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                _f.write(json.dumps(log_payload) + "\n")
+        except Exception:
+            pass
+        # #endregion
         
         # Step 2: Analyze frames with Vision API (labels + logos + text)
         logger.info("Step 2: Analyzing frames with Vision API...")
@@ -175,26 +270,14 @@ def analyze_reel():
                 "query": search_query
             }), 404
         
-        # Step 6: CLIP Visual Similarity Verification
-        logger.info("Step 6: Verifying products with CLIP visual similarity...")
-        clip_service = get_clip_service()
+        # Step 6: (Temporarily disabled) CLIP Visual Similarity Verification
+        # For local testing, we skip the heavy CLIP model to avoid torch/transformers issues.
+        # Products are returned based purely on web search relevance.
+        verified_products = products[:5]
+        for p in verified_products:
+            p['visual_similarity'] = p.get('visual_similarity', 0.5)
         
-        # Use best frame for verification
-        verified_products, best_frame_idx = clip_service.verify_best_frame(
-            frames=frames,
-            products=products,
-            min_similarity=0.40,  # 40% similarity threshold
-            max_results=5
-        )
-        
-        if not verified_products:
-            logger.warning("No products passed CLIP verification threshold")
-            # Fallback: return top search results without verification
-            verified_products = products[:5]
-            for p in verified_products:
-                p['visual_similarity'] = 0.5  # Default score
-        
-        logger.info(f"CLIP verified: {len(verified_products)} products (used frame {best_frame_idx + 1})")
+        logger.info(f"Returning {len(verified_products)} products without CLIP verification (local/dev mode).")
         
         # Step 7: Format response with CLIP flags
         return format_product_response(
@@ -263,6 +346,31 @@ def test_endpoint():
         "message": "Backend is connected!",
         "status": "success",
         "timestamp": "2024-01-01T00:00:00Z"
+    })
+
+
+@app.route('/api/debug/environment', methods=['GET'])
+def check_environment():
+    """Check yt-dlp and ffmpeg availability"""
+    import sys
+    import shutil
+    import tempfile
+    
+    try:
+        import yt_dlp
+        yt_dlp_version = yt_dlp.version.__version__
+    except Exception as e:
+        yt_dlp_version = f"Error: {str(e)}"
+    
+    return jsonify({
+        "python": sys.executable,
+        "yt_dlp_version": yt_dlp_version,
+        "yt_dlp_path": shutil.which("yt-dlp"),
+        "ffmpeg_path": shutil.which("ffmpeg"),
+        "ffprobe_path": shutil.which("ffprobe"),
+        "temp_dir": tempfile.gettempdir(),
+        "google_vision_configured": bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64")),
+        "openai_configured": bool(os.getenv("OPENAI_API_KEY"))
     })
 
 

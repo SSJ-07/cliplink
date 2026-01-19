@@ -11,6 +11,7 @@ from moviepy.editor import VideoFileClip
 import yt_dlp
 import subprocess
 import shutil
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,18 @@ class VideoService:
         Returns:
             Path to downloaded video file or None if failed
         """
+        # Log yt-dlp version and Python environment
+        import sys
+        import shutil
+        try:
+            logger.info(f"Python executable: {sys.executable}")
+            logger.info(f"yt-dlp version: {yt_dlp.version.__version__}")
+            logger.info(f"yt-dlp path: {shutil.which('yt-dlp')}")
+            logger.info(f"ffmpeg path: {shutil.which('ffmpeg')}")
+            logger.info(f"ffprobe path: {shutil.which('ffprobe')}")
+        except Exception as e:
+            logger.warning(f"Could not log environment info: {e}")
+        
         # Strategy 1: Try with browser cookies for Instagram
         if "instagram.com" in reel_url:
             video_path = self._download_with_cookies(reel_url)
@@ -44,7 +57,7 @@ class VideoService:
             
             ydl_opts = {
                 'outtmpl': output_path,
-                'format': 'best[height<=720]',  # Limit quality for faster processing
+                'format': 'best[ext=mp4]/best',  # More flexible format selection
                 'quiet': True,
                 'no_warnings': True,
                 'noplaylist': True,
@@ -53,16 +66,83 @@ class VideoService:
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([reel_url])
-            
-            if os.path.exists(output_path):
+
+            exists = os.path.exists(output_path)
+
+            # #region agent log
+            try:
+                log_payload = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "H_download",
+                    "location": "video_service.py:download_reel:after_yt_dlp",
+                    "message": "yt_dlp download attempt finished",
+                    "data": {
+                        "reel_url_prefix": str(reel_url)[:64],
+                        "output_path_exists": exists
+                    },
+                    "timestamp": __import__("time").time()
+                }
+                with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                    _f.write(json.dumps(log_payload) + "\n")
+            except Exception:
+                pass
+            # #endregion
+
+            if exists:
+                # Log file details
+                file_size = os.path.getsize(output_path)
                 logger.info(f"Successfully downloaded video to {output_path}")
+                logger.info(f"Downloaded file size: {file_size} bytes ({file_size / 1024 / 1024:.2f} MB)")
+                
+                # Try to get video info with ffprobe
+                try:
+                    import subprocess
+                    result = subprocess.run(
+                        ['ffprobe', '-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', output_path],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode == 0:
+                        import json as json_module
+                        probe_data = json_module.loads(result.stdout)
+                        duration = float(probe_data.get('format', {}).get('duration', 0))
+                        logger.info(f"Video duration: {duration:.2f} seconds")
+                        logger.info(f"Video format: {probe_data.get('format', {}).get('format_name', 'unknown')}")
+                    else:
+                        logger.warning(f"ffprobe failed: {result.stderr}")
+                except Exception as e:
+                    logger.warning(f"Could not probe video info: {e}")
+                
                 return output_path
             else:
                 logger.error("Video file not created after download")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error downloading reel: {e}")
+
+            # #region agent log
+            try:
+                log_payload = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "H_download_error",
+                    "location": "video_service.py:download_reel:exception",
+                    "message": "Exception during yt_dlp download",
+                    "data": {
+                        "reel_url_prefix": str(reel_url)[:64],
+                        "error_type": type(e).__name__,
+                        "error_str": str(e)[:200]
+                    },
+                    "timestamp": __import__("time").time()
+                }
+                with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                    _f.write(json.dumps(log_payload) + "\n")
+            except Exception:
+                pass
+            # #endregion
+
             return None
     
     def _download_with_cookies(self, reel_url: str) -> Optional[str]:
@@ -75,7 +155,7 @@ class VideoService:
                 try:
                     ydl_opts = {
                         'outtmpl': output_path,
-                        'format': 'best[height<=720]',
+                        'format': 'best[ext=mp4]/best',  # More flexible format selection
                         'cookiesfrombrowser': (browser,),
                         'quiet': True,
                         'no_warnings': True,
@@ -139,6 +219,85 @@ class VideoService:
             logger.error(f"Error capturing screenshot: {e}")
             return None
     
+    def _extract_frames_ffmpeg(self, video_path: str, num_frames: int = 3) -> List[str]:
+        """
+        Fallback frame extraction using ffmpeg directly
+        
+        Args:
+            video_path: Path to video file
+            num_frames: Number of frames to extract
+            
+        Returns:
+            List of base64 encoded frame images
+        """
+        frames = []
+        temp_dir = tempfile.mkdtemp()
+        
+        try:
+            logger.info(f"Using ffmpeg fallback for frame extraction")
+            
+            # Get video duration first
+            probe_cmd = [
+                'ffprobe', '-v', 'error', '-show_entries',
+                'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1',
+                video_path
+            ]
+            result = subprocess.run(probe_cmd, capture_output=True, text=True)
+            duration = float(result.stdout.strip()) if result.returncode == 0 else 10.0
+            logger.info(f"Video duration from ffprobe: {duration:.2f}s")
+            
+            # Calculate frame times
+            if duration < 10:
+                # For short videos, extract frames at equal intervals
+                start = 0.5
+                end = duration - 0.5
+                interval = (end - start) / (num_frames - 1) if num_frames > 1 else 0
+                times = [start + i * interval for i in range(num_frames)]
+            else:
+                # For longer videos, skip first and last second
+                start = 1.0
+                end = duration - 1.0
+                interval = (end - start) / (num_frames - 1) if num_frames > 1 else 0
+                times = [start + i * interval for i in range(num_frames)]
+            
+            logger.info(f"Extracting frames at times: {[f'{t:.2f}s' for t in times]}")
+            
+            # Extract each frame
+            for i, time in enumerate(times):
+                output_path = os.path.join(temp_dir, f"frame_{i:03d}.jpg")
+                cmd = [
+                    'ffmpeg', '-hide_banner', '-loglevel', 'error',
+                    '-ss', str(time),
+                    '-i', video_path,
+                    '-frames:v', '1',
+                    '-vf', 'scale=640:-1',
+                    '-q:v', '2',
+                    output_path
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0 and os.path.exists(output_path):
+                    # Read and encode as base64
+                    with open(output_path, 'rb') as f:
+                        frame_data = base64.b64encode(f.read()).decode('utf-8')
+                        frames.append(frame_data)
+                    logger.info(f"Frame {i+1} extracted successfully at {time:.2f}s")
+                else:
+                    logger.error(f"Failed to extract frame {i+1} at {time:.2f}s: {result.stderr}")
+            
+            logger.info(f"FFmpeg fallback extracted {len(frames)} frames")
+            return frames
+            
+        except Exception as e:
+            logger.error(f"Error in ffmpeg frame extraction: {e}", exc_info=True)
+            return frames
+        finally:
+            # Clean up temp directory
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception:
+                pass
+    
     def extract_frames(
         self,
         video_path: str,
@@ -159,16 +318,42 @@ class VideoService:
         frames = []
         clip = None
         
+        logger.info(f"Starting frame extraction from {video_path}")
+        logger.info(f"Requested frames: {num_frames}, start_offset: {start_offset}")
+        
+        # Check if file exists and log size
+        if not os.path.exists(video_path):
+            logger.error(f"Video file does not exist: {video_path}")
+            return frames
+        
+        file_size = os.path.getsize(video_path)
+        logger.info(f"Video file size: {file_size} bytes")
+
         try:
             clip = VideoFileClip(video_path)
             duration = clip.duration
+            logger.info(f"Video loaded successfully. Duration: {duration:.2f} seconds")
             
             # Calculate frame extraction times
-            # Skip first and last second, distribute frames evenly
-            usable_duration = duration - start_offset - 1.0
+            # Adjust offsets based on video duration
+            if duration < 10:
+                # For short videos (< 10s), use minimal offsets
+                start_offset = 0.5
+                end_offset = 0.5
+                logger.info(f"Short video detected. Using minimal offsets: start={start_offset}s, end={end_offset}s")
+            else:
+                # For longer videos, use standard offsets
+                start_offset = 1.0
+                end_offset = 1.0
+            
+            # Calculate usable duration
+            usable_duration = duration - start_offset - end_offset
             if usable_duration <= 0:
-                usable_duration = duration * 0.8
+                logger.warning(f"Video too short even with minimal offsets (duration={duration}s). Using fallback.")
+                # Fallback: extract frames from the middle portion
                 start_offset = duration * 0.1
+                usable_duration = duration * 0.8
+                logger.info(f"Fallback: start_offset={start_offset:.2f}, usable_duration={usable_duration:.2f}")
             
             if num_frames == 1:
                 times = [start_offset + usable_duration / 2]
@@ -177,9 +362,11 @@ class VideoService:
                 times = [start_offset + i * interval for i in range(num_frames)]
             
             # Extract frames
+            logger.info(f"Extracting frames at times: {[f'{t:.2f}s' for t in times]}")
             for i, time in enumerate(times):
                 if time >= duration:
                     time = duration - 0.5
+                    logger.warning(f"Frame {i+1} time adjusted to {time:.2f}s (was beyond duration)")
                 
                 try:
                     # Save frame to temporary file
@@ -189,6 +376,14 @@ class VideoService:
                     )
                     
                     clip.save_frame(frame_path, t=time)
+                    
+                    # Check if frame was created
+                    if not os.path.exists(frame_path):
+                        logger.error(f"Frame file not created at {frame_path}")
+                        continue
+                    
+                    frame_size = os.path.getsize(frame_path)
+                    logger.info(f"Frame {i+1} saved: {frame_path} ({frame_size} bytes)")
                     
                     # Read and encode as base64
                     with open(frame_path, 'rb') as f:
@@ -201,14 +396,62 @@ class VideoService:
                 except Exception as e:
                     logger.error(f"Error extracting frame at {time}s: {e}")
             
-            logger.info(f"Extracted {len(frames)} frames from video")
-            
+            logger.info(f"Successfully extracted {len(frames)} frames from video")
+
+            # #region agent log
+            try:
+                log_payload = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "H_frames",
+                    "location": "video_service.py:extract_frames:after_extract",
+                    "message": "Frame extraction completed",
+                    "data": {
+                        "video_path_suffix": os.path.basename(video_path),
+                        "duration": duration,
+                        "num_frames_requested": num_frames,
+                        "frames_extracted": len(frames)
+                    },
+                    "timestamp": __import__("time").time()
+                }
+                with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                    _f.write(json.dumps(log_payload) + "\n")
+            except Exception:
+                pass
+            # #endregion
+
         except Exception as e:
-            logger.error(f"Error in frame extraction: {e}")
-        
+            logger.error(f"Error in frame extraction: {e}", exc_info=True)
+
+            # #region agent log
+            try:
+                log_payload = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "H_frames_error",
+                    "location": "video_service.py:extract_frames:exception",
+                    "message": "Exception during frame extraction",
+                    "data": {
+                        "video_path_suffix": os.path.basename(video_path) if video_path else None,
+                        "error_type": type(e).__name__,
+                        "error_str": str(e)[:200]
+                    },
+                    "timestamp": __import__("time").time()
+                }
+                with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                    _f.write(json.dumps(log_payload) + "\n")
+            except Exception:
+                pass
+            # #endregion
+
         finally:
             if clip:
                 clip.close()
+        
+        # If moviepy failed and we have no frames, try ffmpeg fallback
+        if not frames:
+            logger.warning("MoviePy extraction failed, trying ffmpeg fallback")
+            frames = self._extract_frames_ffmpeg(video_path, num_frames)
         
         return frames
     
@@ -261,16 +504,62 @@ class VideoService:
         """
         video_path = None
         
+        logger.info(f"Starting process_reel for URL: {reel_url}")
+        logger.info(f"Requested number of frames: {num_frames}")
+
         try:
             # Strategy 1: Download video
             video_path = self.download_reel(reel_url)
-            
+
+            # #region agent log
+            try:
+                log_payload = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "H_process_download",
+                    "location": "video_service.py:process_reel:after_download",
+                    "message": "download_reel completed",
+                    "data": {
+                        "reel_url_prefix": str(reel_url)[:64],
+                        "got_video_path": bool(video_path)
+                    },
+                    "timestamp": __import__("time").time()
+                }
+                with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                    _f.write(json.dumps(log_payload) + "\n")
+            except Exception:
+                pass
+            # #endregion
+
             if video_path:
+                logger.info(f"Video downloaded successfully: {video_path}")
                 # Extract frames from video
                 frames = self.extract_frames(video_path, num_frames=num_frames)
                 if frames:
                     logger.info(f"Successfully extracted {len(frames)} frames from video")
+
+                    # #region agent log
+                    try:
+                        log_payload = {
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "H_process_frames_ok",
+                            "location": "video_service.py:process_reel:frames_ok",
+                            "message": "Frames extracted successfully",
+                            "data": {
+                                "frames_extracted": len(frames)
+                            },
+                            "timestamp": __import__("time").time()
+                        }
+                        with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                            _f.write(json.dumps(log_payload) + "\n")
+                    except Exception:
+                        pass
+                    # #endregion
+
                     return frames
+                else:
+                    logger.warning("Frame extraction returned empty list")
             
             # Strategy 2: Screenshot fallback for Instagram
             if "instagram.com" in reel_url:
@@ -296,6 +585,26 @@ class VideoService:
                             os.unlink(screenshot_path)
             
             logger.error("All frame extraction strategies failed")
+
+            # #region agent log
+            try:
+                log_payload = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "H_all_failed",
+                    "location": "video_service.py:process_reel:all_failed",
+                    "message": "All frame extraction strategies failed",
+                    "data": {
+                        "reel_url_prefix": str(reel_url)[:64]
+                    },
+                    "timestamp": __import__("time").time()
+                }
+                with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
+                    _f.write(json.dumps(log_payload) + "\n")
+            except Exception:
+                pass
+            # #endregion
+
             return []
             
         finally:
@@ -313,4 +622,3 @@ def get_video_service() -> VideoService:
     if _video_service is None:
         _video_service = VideoService()
     return _video_service
-

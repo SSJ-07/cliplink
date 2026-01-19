@@ -12,6 +12,21 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+// In local/dev, you might not have Firebase configured.
+// If the API key is missing, skip initializing Firebase so the app can still load.
+let app: ReturnType<typeof initializeApp> | null = null;
+let auth: ReturnType<typeof getAuth> | null = null;
+let googleProvider: GoogleAuthProvider | null = null;
+
+if (firebaseConfig.apiKey) {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  googleProvider = new GoogleAuthProvider();
+} else {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[firebase] Missing Firebase config (VITE_FIREBASE_* env vars). Auth is disabled in this environment.'
+  );
+}
+
+export { auth, googleProvider };
