@@ -122,6 +122,96 @@ class CLIPService:
             logger.error(f"Error getting URL embedding from {image_url}: {e}")
             return None
     
+    def get_text_embedding(self, text: str) -> Optional[np.ndarray]:
+        """
+        Get CLIP embedding for text
+        
+        Args:
+            text: Text to embed
+            
+        Returns:
+            Numpy array embedding or None if failed
+        """
+        if not self.model:
+            logger.warning("CLIP model not initialized")
+            return None
+        
+        try:
+            # Get embedding
+            embedding = self.model.encode(
+                text,
+                convert_to_tensor=True,
+                normalize_embeddings=True
+            )
+            
+            return embedding.cpu().numpy()
+            
+        except Exception as e:
+            logger.error(f"Error getting text embedding: {e}")
+            return None
+    
+    def select_best_frames(
+        self,
+        frames: List[str],
+        user_text: str,
+        top_k: int = 2
+    ) -> List[tuple[str, float, int]]:
+        """
+        Select top-k frames that best match user text using CLIP
+        
+        Args:
+            frames: List of base64 encoded frames
+            user_text: User's text description
+            top_k: Number of top frames to return
+            
+        Returns:
+            List of (frame_base64, similarity_score, frame_index)
+        """
+        if not self.model:
+            logger.warning("CLIP model not available for frame selection")
+            # Return all frames with default scores
+            return [(frames[i], 0.5, i) for i in range(min(top_k, len(frames)))]
+        
+        if not user_text or not user_text.strip():
+            logger.info("No user text provided, returning first frames")
+            return [(frames[i], 1.0, i) for i in range(min(top_k, len(frames)))]
+        
+        logger.info(f"Selecting best {top_k} frames from {len(frames)} for text: '{user_text}'")
+        
+        try:
+            # Get text embedding
+            text_embedding = self.get_text_embedding(user_text)
+            if text_embedding is None:
+                logger.warning("Could not get text embedding, returning first frames")
+                return [(frames[i], 0.5, i) for i in range(min(top_k, len(frames)))]
+            
+            # Get embeddings for all frames and compute similarity
+            frame_scores = []
+            for idx, frame in enumerate(frames):
+                frame_embedding = self.get_frame_embedding(frame)
+                
+                if frame_embedding is None:
+                    logger.warning(f"Could not get embedding for frame {idx+1}")
+                    frame_scores.append((frame, 0.0, idx))
+                    continue
+                
+                # Compute similarity
+                similarity = self.compute_similarity(text_embedding, frame_embedding)
+                frame_scores.append((frame, similarity, idx))
+                logger.info(f"Frame {idx+1} similarity to '{user_text}': {similarity:.3f}")
+            
+            # Sort by similarity (descending) and return top-k
+            frame_scores.sort(key=lambda x: x[1], reverse=True)
+            selected = frame_scores[:top_k]
+            
+            logger.info(f"Selected frames: {[(idx+1, f'{score:.3f}') for _, score, idx in selected]}")
+            return selected
+            
+        except Exception as e:
+            logger.error(f"Error selecting frames: {e}", exc_info=True)
+            # Fallback to first frames
+            return [(frames[i], 0.5, i) for i in range(min(top_k, len(frames)))]
+    
     def compute_similarity(
         self,
         embedding1: np.ndarray,

@@ -14,6 +14,9 @@ import json
 from services.vision_service import get_vision_service
 from services.video_service import get_video_service
 from services.web_search_service import get_web_search_service
+from services.clip_service import get_clip_service
+from services.frame_understanding_service import get_frame_understanding_service
+from services.product_ranking_service import get_product_ranking_service
 
 # Load environment variables
 load_dotenv()
@@ -185,105 +188,73 @@ def analyze_reel():
             }), 400
         
         logger.info(f"Extracted {len(frames)} frames")
-
-        # #region agent log
-        try:
-            log_payload = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "H_frames_ok",
-                "location": "app.py:analyze_reel:frames_ok",
-                "message": "process_reel returned frames",
-                "data": {
-                    "frames_count": len(frames)
-                },
-                "timestamp": __import__("time").time()
-            }
-            with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
-                _f.write(json.dumps(log_payload) + "\n")
-        except Exception:
-            pass
-        # #endregion
         
-        # Step 2: Analyze frames with Vision API (labels + logos + text)
-        logger.info("Step 2: Analyzing frames with Vision API...")
-        all_labels = []
-        all_logos = []
-        all_texts = []
+        # NEW PIPELINE: 4-Stage Visual Product Search
         
-        for i, frame in enumerate(frames):
-            # Get labels
-            labels = vision_service.get_image_labels(frame)
-            all_labels.extend(labels)
-            
-            # Get logos (for brand detection)
-            logos = vision_service.get_logos(frame)
-            all_logos.extend(logos)
-            
-            # Get text (for brand names in text)
-            texts = vision_service.get_text(frame)
-            all_texts.extend(texts)
-            
-            logger.info(f"Frame {i+1}: {len(labels)} labels, {len(logos)} logos, {len(texts)} text segments")
+        # Initialize all services
+        clip_service = get_clip_service()
+        frame_understanding_service = get_frame_understanding_service()
+        product_ranking_service = get_product_ranking_service()
         
-        # Deduplicate labels
-        unique_labels = {}
-        for label in all_labels:
-            desc = label['description']
-            if desc not in unique_labels or label['score'] > unique_labels[desc]['score']:
-                unique_labels[desc] = label
-        
-        final_labels = sorted(unique_labels.values(), key=lambda x: x['score'], reverse=True)
-        logger.info(f"Total: {len(final_labels)} labels, {len(all_logos)} logos, {len(all_texts)} texts")
-        
-        # Step 3: Detect brand
-        logger.info("Step 3: Detecting brand...")
-        detected_brand = web_search_service.detect_brand(all_logos, all_texts, final_labels)
-        if detected_brand:
-            logger.info(f"✓ Brand detected: {detected_brand}")
-        
-        # Step 4: Build search query
-        search_query = user_description
-        if not search_query and final_labels:
-            # If no user description, use labels as query
-            search_query = vision_service.labels_to_search_query(final_labels)
-        
-        # Add brand to query if detected and not already in query
-        if detected_brand and detected_brand.lower() not in search_query.lower():
-            search_query = f"{detected_brand} {search_query}"
-        
-        logger.info(f"Final search query: {search_query}")
-        
-        # Step 5: Search real products from web
-        logger.info("Step 5: Searching products from web...")
-        products = web_search_service.search_products(
-            query=search_query,
-            brand=detected_brand,
-            num_results=10  # Get more candidates for CLIP filtering
+        # Stage 1: Select best frames matching user text
+        logger.info("Stage 1: Selecting best frames matching user description...")
+        selected_frames = clip_service.select_best_frames(
+            frames,
+            user_description,
+            top_k=2  # Use top 2 frames
         )
         
-        if not products:
+        if not selected_frames:
+            logger.warning("Frame selection failed, using all frames")
+            selected_frames = [(frames[i], 1.0, i) for i in range(len(frames))]
+        
+        best_frame = selected_frames[0][0]
+        best_frame_idx = selected_frames[0][2]
+        logger.info(f"Selected frame {best_frame_idx+1} (similarity: {selected_frames[0][1]:.3f})")
+        
+        # Stage 2: Understand the selected frame (structured extraction)
+        logger.info("Stage 2: Understanding frame content...")
+        query_pack = frame_understanding_service.understand_frame(
+            best_frame,
+            vision_service,
+            user_description
+        )
+        
+        # Stage 3: Search for product candidates using query pack
+        logger.info("Stage 3: Searching for product candidates...")
+        candidates = web_search_service.search_products_from_query_pack(
+            query_pack,
+            num_results=30  # Get more candidates for ranking
+        )
+        
+        if not candidates:
+            logger.warning("No product candidates found")
             return jsonify({
                 "error": "No matching products found",
-                "labels": [label['description'] for label in final_labels[:5]],
-                "brand": detected_brand,
-                "query": search_query
+                "query_pack": query_pack,
+                "suggestion": "Try using different keywords or a different reel"
             }), 404
         
-        # Step 6: (Temporarily disabled) CLIP Visual Similarity Verification
-        # For local testing, we skip the heavy CLIP model to avoid torch/transformers issues.
-        # Products are returned based purely on web search relevance.
-        verified_products = products[:5]
-        for p in verified_products:
-            p['visual_similarity'] = p.get('visual_similarity', 0.5)
+        logger.info(f"Found {len(candidates)} product candidates")
         
-        logger.info(f"Returning {len(verified_products)} products without CLIP verification (local/dev mode).")
+        # Stage 4: Rank candidates by visual + text + brand similarity
+        logger.info("Stage 4: Ranking products by visual similarity...")
+        ranked_products = product_ranking_service.rank_products(
+            [sf[0] for sf in selected_frames],  # Use top selected frames
+            query_pack,
+            candidates,
+            clip_service
+        )
         
-        # Step 7: Format response with CLIP flags
+        # Return top 5 ranked products
+        final_products = ranked_products[:5]
+        logger.info(f"Returning top {len(final_products)} products")
+        
+        # Format response
         return format_product_response(
-            verified_products, 
-            final_labels[:10], 
-            detected_brand,
+            final_products,
+            query_pack.get('labels', [])[:10],
+            query_pack.get('brand'),
             used_clip=True,
             frames_extracted=len(frames)
         )
@@ -420,10 +391,18 @@ def format_product_response(products, labels=None, detected_brand=None, used_cli
     
     # Include detected labels if available
     if labels:
-        response['detected_labels'] = [
-            {"label": label['description'], "confidence": label['score']}
-            for label in labels[:10]
-        ]
+        # Handle both dict format (from query pack) and list of strings
+        if labels and isinstance(labels[0], dict):
+            response['detected_labels'] = [
+                {"label": label['description'], "confidence": label['score']}
+                for label in labels[:10]
+            ]
+        else:
+            # Labels is a list of strings
+            response['detected_labels'] = [
+                {"label": label, "confidence": 0.9}
+                for label in labels[:10]
+            ]
     
     # Include detected brand if available
     if detected_brand:

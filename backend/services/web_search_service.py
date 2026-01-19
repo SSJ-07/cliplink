@@ -8,6 +8,7 @@ Docs: https://developers.google.com/custom-search/v1/overview
 """
 import os
 import logging
+import re
 import requests
 from typing import List, Dict, Optional
 from bs4 import BeautifulSoup
@@ -529,13 +530,281 @@ class WebSearchService:
         except Exception as _:
             return []
     
+    def extract_product_details(self, url: str) -> Optional[Dict]:
+        """
+        Extract product details from a product page URL
+        
+        Args:
+            url: Product page URL
+            
+        Returns:
+            Dict with extracted product data or None
+        """
+        try:
+            logger.info(f"Extracting product details from: {url}")
+            response = requests.get(url, headers=self.headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            product_data = {
+                'url': url,
+                'title': '',
+                'description': '',
+                'price': 0.0,
+                'image_url': '',
+                'brand': '',
+                'canonical_url': url
+            }
+            
+            # Extract from meta tags (most reliable)
+            og_title = soup.find('meta', property='og:title')
+            if og_title:
+                product_data['title'] = og_title.get('content', '')
+            
+            og_description = soup.find('meta', property='og:description')
+            if og_description:
+                product_data['description'] = og_description.get('content', '')
+            
+            og_image = soup.find('meta', property='og:image')
+            if og_image:
+                product_data['image_url'] = og_image.get('content', '')
+            
+            # Try schema.org Product markup
+            product_schema = soup.find('script', {'type': 'application/ld+json'})
+            if product_schema:
+                try:
+                    import json as json_module
+                    schema_data = json_module.loads(product_schema.string)
+                    
+                    # Handle both single product and list of products
+                    if isinstance(schema_data, list):
+                        schema_data = schema_data[0]
+                    
+                    if schema_data.get('@type') == 'Product':
+                        product_data['title'] = schema_data.get('name', product_data['title'])
+                        product_data['description'] = schema_data.get('description', product_data['description'])
+                        product_data['brand'] = schema_data.get('brand', {}).get('name', '')
+                        product_data['image_url'] = schema_data.get('image', product_data['image_url'])
+                        
+                        # Extract price
+                        offers = schema_data.get('offers', {})
+                        if isinstance(offers, dict):
+                            price_str = offers.get('price', '0')
+                            product_data['price'] = float(price_str) if price_str else 0.0
+                except Exception as e:
+                    logger.warning(f"Error parsing schema.org data: {e}")
+            
+            # Fallback: extract from title tag
+            if not product_data['title']:
+                title_tag = soup.find('title')
+                if title_tag:
+                    product_data['title'] = title_tag.string or ''
+            
+            # Fallback: extract first good image
+            if not product_data['image_url']:
+                img_tag = soup.find('img', {'class': re.compile(r'product|main|primary', re.I)})
+                if img_tag:
+                    product_data['image_url'] = img_tag.get('src', '')
+            
+            # Extract canonical URL
+            canonical = soup.find('link', {'rel': 'canonical'})
+            if canonical:
+                product_data['canonical_url'] = canonical.get('href', url)
+            
+            logger.info(f"Extracted: {product_data['title'][:50]}...")
+            return product_data
+            
+        except Exception as e:
+            logger.error(f"Error extracting product details from {url}: {e}")
+            return None
+    
     def _parse_price(self, price_str: str) -> float:
         """Parse price string to float"""
         try:
             # Remove currency symbols and commas
             clean_price = price_str.replace('$', '').replace(',', '').strip()
             # Extract first number
+            match = re.search(r'[\d.]+', clean_price)
+            if match:
+                return float(match.group())
+        except Exception:
+            pass
+        return 0.0
+        """Parse price string to float"""
+        try:
+            # Remove currency symbols and commas
+            clean_price = price_str.replace('$', '').replace(',', '').strip()
+            # Extract first number
             import re
+            match = re.search(r'[\d.]+', clean_price)
+            if match:
+                return float(match.group())
+        except Exception:
+            pass
+        return 0.0
+
+
+    def search_products_from_query_pack(
+        self,
+        query_pack: Dict,
+        num_results: int = 30
+    ) -> List[Dict]:
+        """
+        Search using structured query pack
+        
+        Args:
+            query_pack: Dict with structured product info
+                {
+                    "brand": "Nike",
+                    "product_type": "footwear",
+                    "model_guess": "Air Force 1",
+                    "colors": ["white"],
+                    "attributes": ["low-top", "leather"],
+                    "ocr_text": "AF1 SKU123",
+                    "user_text": "white shoes"
+                }
+            num_results: Number of results to return
+            
+        Returns:
+            List of product candidate dicts
+        """
+        logger.info(f"Searching with query pack: {self._format_query_pack(query_pack)}")
+        
+        # Build multiple search queries
+        queries = self._build_queries_from_pack(query_pack)
+        logger.info(f"Built {len(queries)} search queries: {queries}")
+        
+        # Search with all queries and aggregate results
+        all_candidates = []
+        for query in queries:
+            results = self._google_custom_raw(query, start=1, num=10)
+            all_candidates.extend(results)
+        
+        # Deduplicate and rank by URL score
+        ranked = self._filter_and_rank(all_candidates)
+        
+        # Format as product dicts
+        products = []
+        seen_urls = set()
+        
+        for item in ranked[:num_results]:
+            url = item.get('url', '')
+            if not url or url in seen_urls:
+                continue
+            
+            seen_urls.add(url)
+            
+            # Extract image
+            pagemap = item.get('pagemap', {})
+            meta = (pagemap.get('metatags') or [{}])[0]
+            og_image = meta.get('og:image') or meta.get('twitter:image')
+            cse_images = pagemap.get('cse_image')
+            image_url = ""
+            if og_image:
+                image_url = og_image
+            elif isinstance(cse_images, list) and cse_images and isinstance(cse_images[0], dict):
+                image_url = cse_images[0].get('src', '')
+            
+            products.append({
+                'id': '',
+                'title': item.get('title', ''),
+                'description': item.get('snippet', ''),
+                'price': 0.0,
+                'currency': 'USD',
+                'image_url': image_url,
+                'product_url': url,
+                'source': item.get('domain', 'Web'),
+                'tags': [],
+                'url_score': item.get('_url_score', 0)
+            })
+        
+        logger.info(f"Collected {len(products)} product candidates")
+        return products
+    
+    def _build_queries_from_pack(self, query_pack: Dict) -> List[str]:
+        """Build multiple search queries from query pack"""
+        queries = []
+        
+        brand = query_pack.get('brand', '')
+        product_type = query_pack.get('product_type', '')
+        model = query_pack.get('model_guess', '')
+        colors = query_pack.get('colors', [])
+        attributes = query_pack.get('attributes', [])
+        user_text = query_pack.get('user_text', '')
+        ocr_text = query_pack.get('ocr_text', '')
+        
+        # Query 1: Full structured query
+        parts = []
+        if brand:
+            parts.append(brand)
+        if model:
+            parts.append(model)
+        if product_type:
+            parts.append(product_type)
+        if colors:
+            parts.extend(colors[:2])
+        if attributes:
+            parts.extend(attributes[:2])
+        
+        if parts:
+            queries.append(' '.join(parts))
+        
+        # Query 2: User text (if different from structured)
+        if user_text and user_text not in queries:
+            queries.append(user_text)
+        
+        # Query 3: Brand + user text
+        if brand and user_text:
+            queries.append(f"{brand} {user_text}")
+        
+        # Query 4: SKU/Model from OCR (if found)
+        if ocr_text:
+            # Look for SKU patterns
+            sku_matches = re.findall(r'\b[A-Z0-9]{5,}\b', ocr_text)
+            if sku_matches:
+                for sku in sku_matches[:2]:
+                    if brand:
+                        queries.append(f"{brand} {sku}")
+                    else:
+                        queries.append(sku)
+        
+        # Query 5: Site-restricted search (if brand detected)
+        if brand and product_type:
+            brand_lower = brand.lower().replace(' ', '')
+            if brand_lower in self.BRAND_SITES:
+                # Add site-restricted query for brand website
+                site_domain = self.BRAND_SITES[brand_lower]['url'].split('/')[2]
+                queries.append(f"site:{site_domain} {product_type}")
+        
+        # Deduplicate while preserving order
+        seen = set()
+        unique_queries = []
+        for q in queries:
+            q_clean = ' '.join(q.split()).lower()
+            if q_clean and q_clean not in seen:
+                seen.add(q_clean)
+                unique_queries.append(q)
+        
+        return unique_queries[:5]  # Limit to 5 queries max
+    
+    def _format_query_pack(self, query_pack: Dict) -> str:
+        """Format query pack for logging"""
+        parts = []
+        if query_pack.get('brand'):
+            parts.append(f"brand={query_pack['brand']}")
+        if query_pack.get('product_type'):
+            parts.append(f"type={query_pack['product_type']}")
+        if query_pack.get('model_guess'):
+            parts.append(f"model={query_pack['model_guess']}")
+        if query_pack.get('colors'):
+            parts.append(f"colors={','.join(query_pack['colors'])}")
+        return ', '.join(parts) if parts else 'generic'
+    
+    def _parse_price(self, price_str: str) -> float:
+        """Parse price string to float"""
+        try:
+            # Remove currency symbols and commas
+            clean_price = price_str.replace('$', '').replace(',', '').strip()
+            # Extract first number
             match = re.search(r'[\d.]+', clean_price)
             if match:
                 return float(match.group())
