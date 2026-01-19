@@ -129,6 +129,10 @@ const Home: React.FC = () => {
                       loop 
                       playsInline 
                       className={`absolute inset-0 w-full h-full object-cover grayscale brightness-75 transition-all duration-1000 ${demoStep === 0 ? 'blur-md opacity-20' : 'blur-0 opacity-100'}`}
+                      onError={(e) => {
+                        // Silently handle video load errors (404, network issues, etc.)
+                        (e.target as HTMLVideoElement).style.display = 'none';
+                      }}
                     >
                       <source src="https://cdn.pixabay.com/video/2023/11/02/187494-880097103_large.mp4" type="video/mp4" />
                     </video>

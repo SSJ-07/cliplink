@@ -1,8 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import { Product } from '../types';
-import { analyzeReel } from '../services/api';
 import { transformProduct, formatPrice, formatSimilarity } from '../utils/transform';
 
 const AppPage: React.FC = () => {
@@ -14,7 +13,6 @@ const AppPage: React.FC = () => {
 
   const hasStarted = isAnalyzing || products.length > 0;
   const analysisTexts = ["Extracting frames", "Understanding frame", "Searching products"];
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Cycle through analysis steps when loading
   useEffect(() => {
@@ -27,47 +25,49 @@ const AppPage: React.FC = () => {
     }
     return () => {
       clearInterval(interval);
-      // Cancel request on unmount
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
     };
   }, [isAnalyzing]);
 
   const handleAnalyzeReel = async () => {
-    if (!url) return;
-    
-    // Cancel previous request if any
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    // Create new AbortController for this request
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    if (!url.trim()) return;
     
     setIsAnalyzing(true);
     setProducts([]); // Clear existing results for new search
     
     try {
-      const response = await analyzeReel(url, prompt || undefined, 3, controller.signal);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      const response = await fetch(`${apiUrl}/api/analyze-reel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: url,
+          note: prompt || '',
+          num_frames: 3
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
       
       // Transform products to display format
-      const transformedProducts = response.products.map(transformProduct);
+      const transformedProducts = data.products.map(transformProduct);
       setProducts(transformedProducts);
     } catch (error: any) {
       console.error("Discovery failed", error);
-      
-      // Only show error if not cancelled by user
-      if (error.message !== 'Request timeout or cancelled') {
-        alert(`Error: ${error.message || 'Failed to analyze reel. Please try again.'}`);
-      }
-      
-      // Don't set fallback products - let user retry
+      alert(`Error: ${error.message || 'Failed to analyze reel. Please try again.'}`);
       setProducts([]);
     } finally {
       setIsAnalyzing(false);
-      abortControllerRef.current = null;
     }
   };
 

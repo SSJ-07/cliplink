@@ -60,7 +60,7 @@ export async function analyzeReel(
   const controller = signal ? undefined : new AbortController();
   const timeoutId = setTimeout(() => {
     controller?.abort();
-  }, 90000); // 90 second timeout for analyze-reel
+  }, 300000); // 5 minute timeout for analyze-reel (video processing can take time)
 
   try {
     const response = await fetch(`${apiUrl}/api/analyze-reel`, {
