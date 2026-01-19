@@ -1,0 +1,78 @@
+
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClipLink | Digital Fashion Studio</title>
+    <meta name="description" content="AI-powered fashion discovery for the modern curator." />
+    
+    <!-- Space Grotesque: The modern geometric choice -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesque:wght@300;400;500;600;700&family=Cinzel:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Space Grotesque', 'sans-serif'],
+              cinzel: ['Cinzel', 'serif'],
+            },
+            colors: {
+              studio: {
+                bg: '#FAF9F6',
+                card: '#FFFFFF',
+                text: '#000000',
+                muted: '#7F7F7F',
+                border: '#E5E5E5'
+              }
+            },
+            animation: {
+              'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        -webkit-font-smoothing: antialiased;
+        background-color: #FAF9F6;
+        color: #000000;
+        letter-spacing: -0.01em;
+      }
+      
+      .pill-shadow {
+        box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.05);
+      }
+
+      .btn-hover-draw {
+        position: relative;
+        overflow: hidden;
+      }
+
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: #FAF9F6; }
+      ::-webkit-scrollbar-thumb { background: #000; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.12.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.37.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
