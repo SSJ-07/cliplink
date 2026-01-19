@@ -206,3 +206,7 @@ visual-product-search-app-main/
 
 # Old frontend (renamed from frontend)
 old-frontend/
+# Secrets
+*.json
+cliplink-104c9-ac3a58fd9da2.json
+

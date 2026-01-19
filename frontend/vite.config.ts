@@ -4,17 +4,24 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
-    return {
-      server: {
-        port: 3000,
-        host: '0.0.0.0',
-        proxy: {
-          '/api': {
-            target: 'http://localhost:5001',
-            changeOrigin: true,
-          }
+    
+    // Only use proxy in local development
+    const serverConfig = mode === 'development' ? {
+      port: 3000,
+      host: '0.0.0.0',
+      proxy: {
+        '/api': {
+          target: 'http://localhost:5001',
+          changeOrigin: true,
         }
-      },
+      }
+    } : {
+      port: 3000,
+      host: '0.0.0.0',
+    };
+    
+    return {
+      server: serverConfig,
       plugins: [react()],
       resolve: {
         alias: {

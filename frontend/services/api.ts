@@ -6,8 +6,9 @@ const getApiUrl = (): string => {
   if (import.meta.env.DEV) {
     return '';
   }
-  // In production, use env var
-  return import.meta.env.VITE_API_URL || 'http://localhost:5001';
+  // In production on Vercel, API is on same domain (no base URL needed)
+  // Frontend calls /api/*, Vercel routes to Python functions
+  return '';
 };
 
 const apiUrl = getApiUrl();

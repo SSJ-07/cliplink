@@ -1,21 +1,24 @@
 {
   "version": 2,
-  "buildCommand": "cd frontend && npm run build",
-  "outputDirectory": "frontend/dist",
-  "installCommand": "cd frontend && npm install",
   "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    },
     {
       "src": "api/*.py",
       "use": "@vercel/python"
     }
   ],
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ],
   "env": {
     "OPENAI_API_KEY": "$OPENAI_API_KEY",
-    "VITE_API_URL": "$VITE_API_URL",
+    "GOOGLE_APPLICATION_CREDENTIALS_BASE64": "$GOOGLE_APPLICATION_CREDENTIALS_BASE64",
     "VITE_FIREBASE_API_KEY": "$VITE_FIREBASE_API_KEY",
     "VITE_FIREBASE_AUTH_DOMAIN": "$VITE_FIREBASE_AUTH_DOMAIN",
     "VITE_FIREBASE_PROJECT_ID": "$VITE_FIREBASE_PROJECT_ID",
