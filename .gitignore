@@ -210,3 +210,7 @@ old-frontend/
 *.json
 cliplink-104c9-6b743f3b8596.json
 
+
+node_modules/
+frontend/node_modules/
+
