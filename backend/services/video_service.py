@@ -7,11 +7,19 @@ import logging
 import tempfile
 import base64
 from typing import List, Optional
-from moviepy.editor import VideoFileClip
 import yt_dlp
 import subprocess
 import shutil
 import json
+
+# Optional import - gracefully handle missing moviepy (for Vercel)
+try:
+    from moviepy.editor import VideoFileClip
+    MOVIEPY_AVAILABLE = True
+except ImportError:
+    MOVIEPY_AVAILABLE = False
+    VideoFileClip = None
+    logging.warning("moviepy not available. Will use ffmpeg fallback for frame extraction.")
 
 logger = logging.getLogger(__name__)
 
@@ -329,6 +337,11 @@ class VideoService:
         file_size = os.path.getsize(video_path)
         logger.info(f"Video file size: {file_size} bytes")
 
+        # Try moviepy first if available, otherwise use ffmpeg directly
+        if not MOVIEPY_AVAILABLE:
+            logger.info("moviepy not available, using ffmpeg fallback")
+            return self._extract_frames_ffmpeg(video_path, num_frames)
+
         try:
             clip = VideoFileClip(video_path)
             duration = clip.duration
@@ -398,51 +411,8 @@ class VideoService:
             
             logger.info(f"Successfully extracted {len(frames)} frames from video")
 
-            # #region agent log
-            try:
-                log_payload = {
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "H_frames",
-                    "location": "video_service.py:extract_frames:after_extract",
-                    "message": "Frame extraction completed",
-                    "data": {
-                        "video_path_suffix": os.path.basename(video_path),
-                        "duration": duration,
-                        "num_frames_requested": num_frames,
-                        "frames_extracted": len(frames)
-                    },
-                    "timestamp": __import__("time").time()
-                }
-                with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
-                    _f.write(json.dumps(log_payload) + "\n")
-            except Exception:
-                pass
-            # #endregion
-
         except Exception as e:
             logger.error(f"Error in frame extraction: {e}", exc_info=True)
-
-            # #region agent log
-            try:
-                log_payload = {
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "H_frames_error",
-                    "location": "video_service.py:extract_frames:exception",
-                    "message": "Exception during frame extraction",
-                    "data": {
-                        "video_path_suffix": os.path.basename(video_path) if video_path else None,
-                        "error_type": type(e).__name__,
-                        "error_str": str(e)[:200]
-                    },
-                    "timestamp": __import__("time").time()
-                }
-                with open("/Users/sumedhjadhav/Documents/Projects/cliplink/.cursor/debug.log", "a") as _f:
-                    _f.write(json.dumps(log_payload) + "\n")
-            except Exception:
-                pass
-            # #endregion
 
         finally:
             if clip:

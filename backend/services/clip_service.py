@@ -10,9 +10,18 @@ import base64
 from typing import List, Dict, Optional
 import requests
 from PIL import Image
-import torch
-from sentence_transformers import SentenceTransformer
 import numpy as np
+
+# Optional imports - gracefully handle missing dependencies (for Vercel)
+try:
+    import torch
+    from sentence_transformers import SentenceTransformer
+    CLIP_AVAILABLE = True
+except ImportError:
+    CLIP_AVAILABLE = False
+    torch = None
+    SentenceTransformer = None
+    logging.warning("CLIP dependencies (torch, sentence-transformers) not available. CLIP features disabled.")
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +32,20 @@ class CLIPService:
     def __init__(self):
         """Initialize CLIP model"""
         self.model = None
+        if not CLIP_AVAILABLE:
+            logger.warning("CLIP not available - visual similarity will be disabled")
+            self.device = "cpu"
+            return
+        
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self._initialize_model()
     
     def _initialize_model(self):
         """Load CLIP model (lazy loading)"""
+        if not CLIP_AVAILABLE:
+            logger.warning("CLIP dependencies not available")
+            return
+            
         try:
             logger.info("Loading CLIP model...")
             self.model = SentenceTransformer('clip-ViT-B-32')
@@ -167,10 +185,20 @@ class CLIPService:
         Returns:
             List of (frame_base64, similarity_score, frame_index)
         """
-        if not self.model:
-            logger.warning("CLIP model not available for frame selection")
-            # Return all frames with default scores
-            return [(frames[i], 0.5, i) for i in range(min(top_k, len(frames)))]
+        if not CLIP_AVAILABLE or not self.model:
+            logger.warning("CLIP model not available for frame selection, using heuristic")
+            # Return first/middle frames with default scores
+            if not frames:
+                return []
+            # Prefer middle frames over first/last
+            if len(frames) == 1:
+                return [(frames[0], 1.0, 0)]
+            elif len(frames) == 2:
+                return [(frames[0], 0.8, 0), (frames[1], 1.0, 1)]
+            else:
+                # Return first, middle, last
+                mid = len(frames) // 2
+                return [(frames[0], 0.7, 0), (frames[mid], 1.0, mid)][:top_k]
         
         if not user_text or not user_text.strip():
             logger.info("No user text provided, returning first frames")

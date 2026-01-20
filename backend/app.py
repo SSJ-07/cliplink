@@ -118,6 +118,13 @@ def analyze_reel():
         vision_service = get_vision_service()
         web_search_service = get_web_search_service()
         
+        # NEW PIPELINE: 4-Stage Visual Product Search
+        
+        # Initialize all services
+        clip_service = get_clip_service()
+        frame_understanding_service = get_frame_understanding_service()
+        product_ranking_service = get_product_ranking_service()
+        
         # Step 1: Download video and extract frames
         logger.info("Step 1: Extracting frames from video...")
 
@@ -191,11 +198,6 @@ def analyze_reel():
         
         # NEW PIPELINE: 4-Stage Visual Product Search
         
-        # Initialize all services
-        clip_service = get_clip_service()
-        frame_understanding_service = get_frame_understanding_service()
-        product_ranking_service = get_product_ranking_service()
-        
         # Stage 1: Select best frames matching user text
         logger.info("Stage 1: Selecting best frames matching user description...")
         selected_frames = clip_service.select_best_frames(
@@ -212,7 +214,7 @@ def analyze_reel():
         best_frame_idx = selected_frames[0][2]
         logger.info(f"Selected frame {best_frame_idx+1} (similarity: {selected_frames[0][1]:.3f})")
         
-        # Stage 2: Understand the selected frame (structured extraction)
+        # Stage 2: Understand the selected frame
         logger.info("Stage 2: Understanding frame content...")
         query_pack = frame_understanding_service.understand_frame(
             best_frame,
@@ -220,11 +222,11 @@ def analyze_reel():
             user_description
         )
         
-        # Stage 3: Search for product candidates using query pack
+        # Stage 3: Search for product candidates
         logger.info("Stage 3: Searching for product candidates...")
         candidates = web_search_service.search_products_from_query_pack(
             query_pack,
-            num_results=30  # Get more candidates for ranking
+            num_results=30
         )
         
         if not candidates:
@@ -240,7 +242,7 @@ def analyze_reel():
         # Stage 4: Rank candidates by visual + text + brand similarity
         logger.info("Stage 4: Ranking products by visual similarity...")
         ranked_products = product_ranking_service.rank_products(
-            [sf[0] for sf in selected_frames],  # Use top selected frames
+            [sf[0] for sf in selected_frames],
             query_pack,
             candidates,
             clip_service

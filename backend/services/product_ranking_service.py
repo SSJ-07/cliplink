@@ -5,7 +5,15 @@ Multi-factor ranking using visual similarity, text similarity, and brand matchin
 import logging
 from typing import List, Dict, Optional
 import numpy as np
-from services.clip_service import CLIPService
+
+# Optional import - gracefully handle missing CLIP (for Vercel)
+try:
+    from services.clip_service import CLIPService
+    CLIP_SERVICE_AVAILABLE = True
+except (ImportError, AttributeError):
+    CLIP_SERVICE_AVAILABLE = False
+    CLIPService = None
+    logging.warning("CLIP service not available. Will use text-only ranking.")
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +35,7 @@ class ProductRankingService:
         selected_frames: List[str],
         query_pack: Dict,
         candidates: List[Dict],
-        clip_service: CLIPService
+        clip_service=None  # Optional - can be None if CLIP unavailable
     ) -> List[Dict]:
         """
         Rank products by multi-factor scoring
@@ -36,12 +44,18 @@ class ProductRankingService:
             selected_frames: List of base64 encoded frames (top matches to user text)
             query_pack: Structured product info extracted from frame
             candidates: List of product candidate dicts
-            clip_service: CLIP service for embeddings
+            clip_service: CLIP service for embeddings (optional, None if unavailable)
             
         Returns:
             Ranked list of products with final scores
         """
-        logger.info(f"Ranking {len(candidates)} candidates using visual + text + brand scoring")
+        # Check if CLIP is available
+        use_clip = clip_service is not None and CLIP_SERVICE_AVAILABLE and clip_service.model is not None
+        
+        if use_clip:
+            logger.info(f"Ranking {len(candidates)} candidates using visual + text + brand scoring")
+        else:
+            logger.info(f"Ranking {len(candidates)} candidates using text + brand scoring (CLIP unavailable)")
         
         if not candidates:
             return []
@@ -75,12 +89,15 @@ class ProductRankingService:
                 
                 logger.info(f"Scoring candidate {idx+1}/{len(candidates)}: {product_title[:50]}...")
                 
-                # 1. Visual similarity score (CLIP)
-                visual_score = self._compute_visual_score(
-                    selected_frames,
-                    product_image_url,
-                    clip_service
-                )
+                # 1. Visual similarity score (CLIP) - optional
+                if use_clip:
+                    visual_score = self._compute_visual_score(
+                        selected_frames,
+                        product_image_url,
+                        clip_service
+                    )
+                else:
+                    visual_score = 0.0
                 
                 # 2. Text similarity score (OpenAI embeddings)
                 text_score = self._compute_text_score(
@@ -94,12 +111,20 @@ class ProductRankingService:
                     query_pack.get('brand', '')
                 )
                 
-                # Calculate final weighted score
-                final_score = (
-                    self.WEIGHT_VISUAL * visual_score +
-                    self.WEIGHT_TEXT * text_score +
-                    self.WEIGHT_BRAND * brand_score
-                )
+                # Calculate final weighted score (adjust weights if CLIP unavailable)
+                if use_clip:
+                    final_score = (
+                        self.WEIGHT_VISUAL * visual_score +
+                        self.WEIGHT_TEXT * text_score +
+                        self.WEIGHT_BRAND * brand_score
+                    )
+                else:
+                    # Without CLIP, use text + brand only (normalize weights)
+                    total_weight = self.WEIGHT_TEXT + self.WEIGHT_BRAND
+                    final_score = (
+                        (self.WEIGHT_TEXT / total_weight) * text_score +
+                        (self.WEIGHT_BRAND / total_weight) * brand_score
+                    )
                 
                 # Add scores to candidate
                 candidate['visual_similarity'] = round(visual_score, 3)
@@ -132,10 +157,10 @@ class ProductRankingService:
         self,
         selected_frames: List[str],
         product_image_url: str,
-        clip_service: CLIPService
+        clip_service
     ) -> float:
         """Compute visual similarity between frames and product image"""
-        if not product_image_url or not selected_frames:
+        if not clip_service or not product_image_url or not selected_frames:
             return 0.0
         
         try:

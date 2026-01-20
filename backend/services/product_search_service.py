@@ -8,7 +8,25 @@ import json
 from typing import List, Dict, Optional
 import numpy as np
 from openai import OpenAI
-from sklearn.metrics.pairwise import cosine_similarity
+
+# Optional import - gracefully handle missing sklearn (for Vercel)
+try:
+    from sklearn.metrics.pairwise import cosine_similarity
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+    # Use numpy-based cosine similarity instead
+    def cosine_similarity(a, b):
+        """Numpy-based cosine similarity fallback"""
+        if len(a.shape) == 1:
+            a = a.reshape(1, -1)
+        if len(b.shape) == 1:
+            b = b.reshape(1, -1)
+        dot_product = np.dot(a, b.T)
+        norm_a = np.linalg.norm(a, axis=1, keepdims=True)
+        norm_b = np.linalg.norm(b, axis=1, keepdims=True)
+        return dot_product / (norm_a * norm_b.T)
+    logging.warning("sklearn not available. Using numpy-based cosine similarity.")
 
 logger = logging.getLogger(__name__)
 

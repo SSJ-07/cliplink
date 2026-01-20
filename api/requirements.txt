@@ -1,16 +1,26 @@
+# Core Flask dependencies
 Flask==3.0.0
 Flask-CORS==4.0.0
-openai==1.12.0
-yt-dlp==2025.10.14
-moviepy==1.0.3
-Pillow==10.1.0
-requests==2.31.0
 python-dotenv==1.0.0
+
+# API clients
+openai==1.12.0
 google-cloud-vision==3.7.0
+requests==2.31.0
+
+# Media processing (lightweight)
+yt-dlp==2025.10.14
+Pillow==10.1.0
+
+# Data processing
 numpy==1.26.3
-scikit-learn==1.4.0
+
+# Web scraping
 beautifulsoup4==4.12.3
 lxml==5.1.0
-sentence-transformers==2.3.1
-torch==2.8.0
-torchvision==0.23.0
+
+# REMOVED for Vercel compatibility:
+# - torch, torchvision (too large, ~2.5GB)
+# - sentence-transformers (requires torch, downloads CLIP model ~600MB)
+# - moviepy (requires ffmpeg binary, replaced with ffmpeg subprocess)
+# - scikit-learn (replaced with numpy for cosine similarity)
