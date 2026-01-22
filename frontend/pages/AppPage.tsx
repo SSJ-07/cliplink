@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import { Product } from '@/types';
 import { transformProduct, formatPrice, formatSimilarity } from '@/utils/transform';
+import { analyzeReel as callAnalyzeReelApi } from '@/services/api';
 
 const AppPage: React.FC = () => {
   const [url, setUrl] = useState('');
@@ -35,29 +36,12 @@ const AppPage: React.FC = () => {
     setProducts([]); // Clear existing results for new search
     
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      const response = await fetch(`${apiUrl}/api/analyze-reel`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: url,
-          note: prompt || '',
-          num_frames: 3
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      // Use the API service which handles relative URLs correctly
+      const data = await callAnalyzeReelApi(
+        url,
+        prompt || '',
+        3 // num_frames
+      );
       
       // Transform products to display format
       const transformedProducts = data.products.map(transformProduct);
