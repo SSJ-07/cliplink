@@ -4,11 +4,12 @@ Uses the ClipLink backend services for the 4-stage pipeline
 """
 import sys
 import os
+import json
 
 # Add backend to path so we can import services
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
-from flask import jsonify, request as flask_request
+from flask import Flask, jsonify, request as flask_request
 import logging
 
 # Import backend services
@@ -76,16 +77,28 @@ def format_product_response(products, labels=None, detected_brand=None, used_cli
     return response
 
 
-def handler(request):
-    """Vercel serverless function handler for analyze-reel endpoint"""
+# Create Flask app for request handling
+app = Flask(__name__)
+
+@app.route('/api/analyze-reel', methods=['POST', 'OPTIONS'])
+def analyze_reel_route():
+    """Flask route handler for analyze-reel"""
+    return analyze_reel_logic()
+
+def analyze_reel_logic():
+    """Core logic for analyzing reels"""
     try:
-        if request.method == 'OPTIONS':
-            return ('', 200)
+        if flask_request.method == 'OPTIONS':
+            return ('', 200, {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+            })
         
-        if request.method != 'POST':
+        if flask_request.method != 'POST':
             return jsonify({"error": "Method not allowed"}), 405
         
-        data = request.get_json()
+        data = flask_request.get_json()
         
         if not data:
             return jsonify({"error": "No JSON data provided"}), 400
@@ -194,3 +207,53 @@ def handler(request):
             "message": "An error occurred while processing your request"
         }), 500
 
+def handler(vercel_request):
+    """Vercel serverless function handler - converts Vercel request to Flask WSGI"""
+    from werkzeug.wrappers import Request, Response
+    from werkzeug.serving import WSGIRequestHandler
+    
+    # Convert Vercel request to Werkzeug request
+    environ = {
+        'REQUEST_METHOD': vercel_request.get('method', 'GET'),
+        'PATH_INFO': vercel_request.get('path', '/api/analyze-reel'),
+        'QUERY_STRING': '',
+        'CONTENT_TYPE': vercel_request.get('headers', {}).get('content-type', 'application/json'),
+        'CONTENT_LENGTH': str(len(vercel_request.get('body', '') or '')),
+        'wsgi.input': None,
+        'wsgi.version': (1, 0),
+        'wsgi.url_scheme': 'https',
+        'wsgi.errors': None,
+        'wsgi.multithread': False,
+        'wsgi.multiprocess': True,
+        'wsgi.run_once': False,
+        'SERVER_NAME': 'vercel',
+        'SERVER_PORT': '443',
+        'HTTP_HOST': vercel_request.get('headers', {}).get('host', ''),
+    }
+    
+    # Add headers
+    for key, value in vercel_request.get('headers', {}).items():
+        environ[f'HTTP_{key.upper().replace("-", "_")}'] = value
+    
+    # Handle body
+    body = vercel_request.get('body', '') or ''
+    if body:
+        environ['wsgi.input'] = type('obj', (object,), {
+            'read': lambda: body.encode() if isinstance(body, str) else body,
+            'readline': lambda: b'',
+            'readlines': lambda: []
+        })()
+    
+    # Create Werkzeug request
+    werkzeug_request = Request(environ)
+    
+    # Call Flask app
+    with app.request_context(werkzeug_request.environ):
+        response = app.full_dispatch_request()
+    
+    # Convert Flask response to Vercel format
+    return {
+        'statusCode': response.status_code,
+        'headers': dict(response.headers),
+        'body': response.get_data(as_text=True)
+    }
