@@ -9,7 +9,6 @@ import json
 # Add backend to path so we can import services
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
-from flask import Flask, jsonify, request as flask_request
 import logging
 
 # Import backend services
@@ -77,38 +76,60 @@ def format_product_response(products, labels=None, detected_brand=None, used_cli
     return response
 
 
-# Create Flask app for request handling
-app = Flask(__name__)
-
-@app.route('/api/analyze-reel', methods=['POST', 'OPTIONS'])
-def analyze_reel_route():
-    """Flask route handler for analyze-reel"""
-    return analyze_reel_logic()
-
-def analyze_reel_logic():
-    """Core logic for analyzing reels"""
+def handler(request):
+    """Vercel serverless function handler"""
     try:
-        if flask_request.method == 'OPTIONS':
-            return ('', 200, {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type'
-            })
+        # Handle OPTIONS for CORS
+        method = getattr(request, 'method', None) or request.get('method', 'GET') if isinstance(request, dict) else 'GET'
         
-        if flask_request.method != 'POST':
-            return jsonify({"error": "Method not allowed"}), 405
+        if method == 'OPTIONS':
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type'
+                },
+                'body': ''
+            }
         
-        data = flask_request.get_json()
+        # Only accept POST
+        if method != 'POST':
+            return {
+                'statusCode': 405,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'Method not allowed'})
+            }
         
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
+        # Parse request body - handle both object and dict formats
+        if hasattr(request, 'body'):
+            body = request.body
+            headers = getattr(request, 'headers', {}) or {}
+        elif isinstance(request, dict):
+            body = request.get('body', '')
+            headers = request.get('headers', {}) or {}
+        else:
+            body = ''
+            headers = {}
+        
+        # Parse JSON body
+        if isinstance(body, bytes):
+            data = json.loads(body.decode('utf-8'))
+        elif isinstance(body, str):
+            data = json.loads(body) if body else {}
+        else:
+            data = body if body else {}
         
         reel_url = data.get('url')
         user_description = data.get('note', '')
         num_frames = data.get('num_frames', 3)
         
         if not reel_url:
-            return jsonify({"error": "URL is required"}), 400
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'URL is required'})
+            }
         
         logger.info(f"Processing reel: {reel_url}")
         logger.info(f"User description: {user_description}")
@@ -127,11 +148,15 @@ def analyze_reel_logic():
         
         if not frames:
             logger.warning("Could not extract frames from video")
-            return jsonify({
-                "error": "no_frame_extracted",
-                "message": "Unable to extract frames from the Instagram reel.",
-                "suggestion": "Try using a different reel URL or ensure the reel is publicly accessible."
-            }), 400
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({
+                    'error': 'no_frame_extracted',
+                    'message': 'Unable to extract frames from the Instagram reel.',
+                    'suggestion': 'Try using a different reel URL or ensure the reel is publicly accessible.'
+                })
+            }
         
         logger.info(f"Extracted {len(frames)} frames")
         
@@ -168,11 +193,15 @@ def analyze_reel_logic():
         
         if not candidates:
             logger.warning("No product candidates found")
-            return jsonify({
-                "error": "No matching products found",
-                "query_pack": query_pack,
-                "suggestion": "Try using different keywords or a different reel"
-            }), 404
+            return {
+                'statusCode': 404,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({
+                    'error': 'No matching products found',
+                    'query_pack': query_pack,
+                    'suggestion': 'Try using different keywords or a different reel'
+                })
+            }
         
         logger.info(f"Found {len(candidates)} product candidates")
         
@@ -198,62 +227,22 @@ def analyze_reel_logic():
             frames_extracted=len(frames)
         )
         
-        return jsonify(response)
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps(response)
+        }
         
     except Exception as e:
-        logger.error(f"Error in analyze_reel: {e}", exc_info=True)
-        return jsonify({
-            "error": str(e),
-            "message": "An error occurred while processing your request"
-        }), 500
-
-def handler(vercel_request):
-    """Vercel serverless function handler - converts Vercel request to Flask WSGI"""
-    from werkzeug.wrappers import Request, Response
-    from werkzeug.serving import WSGIRequestHandler
-    
-    # Convert Vercel request to Werkzeug request
-    environ = {
-        'REQUEST_METHOD': vercel_request.get('method', 'GET'),
-        'PATH_INFO': vercel_request.get('path', '/api/analyze-reel'),
-        'QUERY_STRING': '',
-        'CONTENT_TYPE': vercel_request.get('headers', {}).get('content-type', 'application/json'),
-        'CONTENT_LENGTH': str(len(vercel_request.get('body', '') or '')),
-        'wsgi.input': None,
-        'wsgi.version': (1, 0),
-        'wsgi.url_scheme': 'https',
-        'wsgi.errors': None,
-        'wsgi.multithread': False,
-        'wsgi.multiprocess': True,
-        'wsgi.run_once': False,
-        'SERVER_NAME': 'vercel',
-        'SERVER_PORT': '443',
-        'HTTP_HOST': vercel_request.get('headers', {}).get('host', ''),
-    }
-    
-    # Add headers
-    for key, value in vercel_request.get('headers', {}).items():
-        environ[f'HTTP_{key.upper().replace("-", "_")}'] = value
-    
-    # Handle body
-    body = vercel_request.get('body', '') or ''
-    if body:
-        environ['wsgi.input'] = type('obj', (object,), {
-            'read': lambda: body.encode() if isinstance(body, str) else body,
-            'readline': lambda: b'',
-            'readlines': lambda: []
-        })()
-    
-    # Create Werkzeug request
-    werkzeug_request = Request(environ)
-    
-    # Call Flask app
-    with app.request_context(werkzeug_request.environ):
-        response = app.full_dispatch_request()
-    
-    # Convert Flask response to Vercel format
-    return {
-        'statusCode': response.status_code,
-        'headers': dict(response.headers),
-        'body': response.get_data(as_text=True)
-    }
+        logger.error(f"Error in handler: {e}", exc_info=True)
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({
+                'error': str(e),
+                'message': 'An error occurred while processing your request'
+            })
+        }
