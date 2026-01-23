@@ -94,7 +94,7 @@ const Home: React.FC = () => {
         @keyframes ripple {
           0% {
             transform: translate(-50%, -50%) scale(0.9);
-            opacity: 0.5;
+            opacity: 0.7;
           }
           100% {
             transform: translate(-50%, -50%) scale(1.5);
@@ -199,7 +199,7 @@ const Home: React.FC = () => {
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
                           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full border-[2.5px] border-white/50 animate-[ripple_2s_ease-out_infinite]" />
                           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-white/50 animate-[ripple_2s_ease-out_infinite] [animation-delay:0.5s]" />
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full border-[2.5px] border-white/40 animate-[ripple_2s_ease-out_infinite] [animation-delay:1s]" />
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full border-[2.5px] border-white/50 animate-[ripple_2s_ease-out_infinite] [animation-delay:1s]" />
                         </div>
                         
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md px-5 py-2.5 rounded-full border border-studio-border shadow-xl z-10">
