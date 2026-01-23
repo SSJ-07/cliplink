@@ -242,21 +242,27 @@ const Home: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      </main>
 
-          <div className="border-t border-studio-border pt-20 pb-32 grid grid-cols-1 md:grid-cols-2 gap-16">
-            {[
-              { title: "Visual AI", desc: "Proprietary recognition of textures, brands, and silhouettes." },
-              { title: "Direct Links", desc: "Automated routing to verified luxury and high-street retailers." }
-            ].map((feature, i) => (
-              <div key={i} className="space-y-4">
-                <span className="text-[10px] font-bold text-studio-muted">0{i+1}</span>
-                <h3 className="text-lg font-bold tracking-tight uppercase">{feature.title}</h3>
-                <p className="text-sm font-light leading-relaxed text-studio-muted">{feature.desc}</p>
-              </div>
+      {/* Features section with full-width border */}
+      <div className="border-t border-studio-border">
+        <div className="px-6">
+          <div className="max-w-7xl mx-auto pt-20 pb-32 grid grid-cols-1 md:grid-cols-3 gap-16">
+          {[
+            { title: "Visual AI", desc: "Proprietary recognition of textures, brands, and silhouettes." },
+            { title: "Direct Links", desc: "Automated routing to verified luxury and high-street retailers." },
+            { title: "Instant Results", desc: "Real-time product discovery with seamless integration across platforms." }
+          ].map((feature, i) => (
+            <div key={i} className="space-y-4">
+              <span className="text-[10px] font-bold text-studio-muted">0{i+1}</span>
+              <h3 className="text-lg font-bold tracking-tight uppercase">{feature.title}</h3>
+              <p className="text-sm font-light leading-relaxed text-studio-muted">{feature.desc}</p>
+            </div>
             ))}
           </div>
         </div>
-      </main>
+      </div>
 
       <footer className="border-t border-studio-border py-20 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start gap-12">
@@ -265,20 +271,21 @@ const Home: React.FC = () => {
             <p className="text-xs text-studio-muted max-w-xs leading-relaxed">
               Curating the future of social commerce through advanced visual intelligence.
             </p>
+            <p className="text-[10px] text-studio-muted tracking-wide">
+              © 2026 Cliplink. All rights reserved.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-20">
             <div className="space-y-4">
               <span className="text-[10px] font-bold uppercase tracking-widest text-studio-muted">Contact</span>
               <div className="flex flex-col text-xs font-medium space-y-2">
-                <a href="#" className="hover:underline">Press</a>
-                <a href="#" className="hover:underline">Studio</a>
+                <a href="mailto:sumedh.sa.jadhav@gmail.com" target="_blank" rel="noopener noreferrer" className="hover:underline">Mail</a>
               </div>
             </div>
             <div className="space-y-4">
               <span className="text-[10px] font-bold uppercase tracking-widest text-studio-muted">Social</span>
               <div className="flex flex-col text-xs font-medium space-y-2">
-                <a href="#" className="hover:underline">Instagram</a>
-                <a href="#" className="hover:underline">Twitter</a>
+                <a href="https://www.linkedin.com/in/sumedh-jadhav/" target="_blank" rel="noopener noreferrer" className="hover:underline">LinkedIn</a>
               </div>
             </div>
           </div>
