@@ -90,12 +90,38 @@ const Home: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-studio-bg selection:bg-black selection:text-white">
+      <style>{`
+        @keyframes ripple {
+          0% {
+            transform: translate(-50%, -50%) scale(0.9);
+            opacity: 0.5;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1.5);
+            opacity: 0;
+          }
+        }
+        /* Hide scrollbar */
+        body {
+          overflow-y: scroll;
+        }
+        body::-webkit-scrollbar {
+          display: none;
+        }
+        body {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
       <Navbar />
       
       <main className="px-6">
         <div className="max-w-7xl mx-auto">
           <div className="min-h-[calc(100vh-80px)] flex items-center pt-24 mb-16">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-center w-full">
+            <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-16 items-center w-full">
+              {/* Vertical Editorial Divider */}
+              <div className="hidden lg:block absolute left-[calc(58.33%+1rem)] top-1/2 -translate-y-1/2 w-[1.5px] h-[70%] bg-neutral-400/20 pointer-events-none" />
+              
               {/* Left Content */}
               <div className="lg:col-span-7">
                 <h1 className="text-7xl md:text-[8vw] font-cinzel font-bold leading-[0.9] tracking-tighter mb-12 uppercase">
@@ -169,7 +195,14 @@ const Home: React.FC = () => {
                            <div className="w-32 h-32 border border-white/60 rounded-full animate-[ping_2s_infinite]" />
                         </div>
                         
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md px-5 py-2.5 rounded-full border border-studio-border shadow-xl">
+                        {/* Subtle ripple effect behind loading text */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full border-[2.5px] border-white/50 animate-[ripple_2s_ease-out_infinite]" />
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-white/50 animate-[ripple_2s_ease-out_infinite] [animation-delay:0.5s]" />
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full border-[2.5px] border-white/40 animate-[ripple_2s_ease-out_infinite] [animation-delay:1s]" />
+                        </div>
+                        
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md px-5 py-2.5 rounded-full border border-studio-border shadow-xl z-10">
                           <span className="text-[10px] font-bold tracking-[0.2em] uppercase flex items-center gap-2 whitespace-nowrap">
                             <span className="w-1.5 h-1.5 bg-black rounded-full animate-pulse" />
                             {analysisTexts[analysisSubStep]}

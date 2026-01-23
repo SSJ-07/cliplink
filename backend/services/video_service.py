@@ -74,7 +74,7 @@ class VideoService:
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([reel_url])
-
+            
             exists = os.path.exists(output_path)
 
             # #region agent log
@@ -126,7 +126,7 @@ class VideoService:
             else:
                 logger.error("Video file not created after download")
                 return None
-
+                
         except Exception as e:
             logger.error(f"Error downloading reel: {e}")
 
@@ -341,7 +341,7 @@ class VideoService:
         if not MOVIEPY_AVAILABLE:
             logger.info("moviepy not available, using ffmpeg fallback")
             return self._extract_frames_ffmpeg(video_path, num_frames)
-
+        
         try:
             clip = VideoFileClip(video_path)
             duration = clip.duration
@@ -410,10 +410,10 @@ class VideoService:
                     logger.error(f"Error extracting frame at {time}s: {e}")
             
             logger.info(f"Successfully extracted {len(frames)} frames from video")
-
+            
         except Exception as e:
             logger.error(f"Error in frame extraction: {e}", exc_info=True)
-
+        
         finally:
             if clip:
                 clip.close()
@@ -476,7 +476,7 @@ class VideoService:
         
         logger.info(f"Starting process_reel for URL: {reel_url}")
         logger.info(f"Requested number of frames: {num_frames}")
-
+        
         try:
             # Strategy 1: Download video
             video_path = self.download_reel(reel_url)
@@ -500,7 +500,7 @@ class VideoService:
             except Exception:
                 pass
             # #endregion
-
+            
             if video_path:
                 logger.info(f"Video downloaded successfully: {video_path}")
                 # Extract frames from video
